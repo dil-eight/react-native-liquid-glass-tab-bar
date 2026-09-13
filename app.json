@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Liquid Glass Tab Bar",
+    "slug": "react-native-liquid-glass-tab-bar",
+    "scheme": "liquidglasstabbar",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.react-native-liquid-glass-tab-bar"
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
