@@ -7,7 +7,7 @@ import {
   useReducedMotion,
   useSharedValue,
   withDelay,
-  withRepeat,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
@@ -77,13 +77,12 @@ export const useTravelingIndicator = (
   const bumpY = useSharedValue(0)
   const dragX = useSharedValue(0)
   const dragY = useSharedValue(0)
-  const dragPulse = useSharedValue(0)
   const distancePressure = useSharedValue(0)
   const glassPresence = useSharedValue(0)
   const restReveal = useSharedValue(1)
   const restOpacity = useSharedValue(1)
   const dragStartX = useSharedValue(0)
-  const isDragPressureActive = useSharedValue(0)
+  const dragLastX = useSharedValue(0)
   const isRowDragActive = useSharedValue(0)
   const rowWidth = useSharedValue(0)
   const trackedLayouts = useSharedValue<Array<TrackedLayout>>([])
@@ -152,10 +151,13 @@ export const useTravelingIndicator = (
     return Math.min(Math.max((travelUnits - 0.75) * 0.4, 0), DISTANCE_PRESSURE_MAX)
   }
 
-  const getDragPressure = (dragDistance: number, base: number) => {
+  const getDragMotionPressure = (moveDelta: number, velocityX: number, base: number) => {
     'worklet'
 
-    return Math.min((dragDistance / base) * 3.2, DISTANCE_PRESSURE_MAX)
+    const deltaPressure = (Math.abs(moveDelta) / base) * 2.4
+    const velocityPressure = Math.abs(velocityX) / 1800
+
+    return Math.min(Math.max(deltaPressure, velocityPressure), DISTANCE_PRESSURE_MAX)
   }
 
   const getMotionRadius = () => {
@@ -203,7 +205,6 @@ export const useTravelingIndicator = (
         cancelAnimation(bumpY)
         cancelAnimation(dragX)
         cancelAnimation(dragY)
-        cancelAnimation(dragPulse)
         cancelAnimation(distancePressure)
         cancelAnimation(glassPresence)
         cancelAnimation(restReveal)
@@ -215,7 +216,6 @@ export const useTravelingIndicator = (
         bumpY.value = 0
         dragX.value = 0
         dragY.value = 0
-        dragPulse.value = 0
         distancePressure.value = 0
         glassPresence.value = 0
         restOpacity.value = 1
@@ -289,7 +289,6 @@ export const useTravelingIndicator = (
       bumpY,
       dragX,
       dragY,
-      dragPulse,
       distancePressure,
       glassPresence,
       restOpacity,
@@ -448,19 +447,23 @@ export const useTravelingIndicator = (
         cancelAnimation(bumpY)
         cancelAnimation(dragX)
         cancelAnimation(dragY)
-        cancelAnimation(dragPulse)
         cancelAnimation(distancePressure)
         cancelAnimation(glassPresence)
         cancelAnimation(restReveal)
         cancelAnimation(restOpacity)
 
         dragStartX.value = translateX.value
-        isDragPressureActive.value = 0
+        dragLastX.value = translateX.value
         bumpX.value = 0
         bumpY.value = 0
-        dragX.value = 0
-        dragY.value = 0
-        dragPulse.value = 0
+        dragX.value = withTiming(1, {
+          duration: BUMP_RISE_MS,
+          easing: Easing.out(Easing.quad),
+        })
+        dragY.value = withTiming(1, {
+          duration: BUMP_RISE_MS,
+          easing: Easing.out(Easing.quad),
+        })
         distancePressure.value = 0
         if (hasGlass) {
           glassPresence.value = withTiming(1, {
@@ -495,33 +498,26 @@ export const useTravelingIndicator = (
         const nextX = Math.min(Math.max(dragStartX.value + event.translationX, first.x), maxX)
         const nearest = nearestLayout(nextX + width.value / 2, list)
         const pressureBase = Math.max(width.value, nearest.width, 1)
-        const dragDistance = Math.abs(nextX - dragStartX.value)
+        const moveDelta = nextX - dragLastX.value
+        const motionPressure = getDragMotionPressure(moveDelta, event.velocityX, pressureBase)
 
         translateX.value = nextX
+        dragLastX.value = nextX
         width.value = withTiming(nearest.width, { duration: 90 })
-
-        if (dragDistance > 1 && isDragPressureActive.value === 0) {
-          isDragPressureActive.value = 1
-          cancelAnimation(dragPulse)
-          dragPulse.value = withRepeat(
-            withTiming(1, {
-              duration: 420,
-              easing: Easing.inOut(Easing.quad),
+        cancelAnimation(distancePressure)
+        distancePressure.value = withSequence(
+          withTiming(motionPressure, {
+            duration: 70,
+            easing: Easing.out(Easing.quad),
+          }),
+          withDelay(
+            70,
+            withTiming(0, {
+              duration: 180,
+              easing: Easing.out(Easing.quad),
             }),
-            -1,
-            true,
-          )
-          dragX.value = withTiming(1, {
-            duration: BUMP_RISE_MS,
-            easing: Easing.out(Easing.quad),
-          })
-          dragY.value = withTiming(1, {
-            duration: BUMP_RISE_MS,
-            easing: Easing.out(Easing.quad),
-          })
-        }
-
-        distancePressure.value = getDragPressure(dragDistance, pressureBase)
+          ),
+        )
       })
       .onFinalize((_event, success) => {
         const list = trackedLayouts.value
@@ -536,12 +532,6 @@ export const useTravelingIndicator = (
           : (list.find((layout) => layout.key === activeKey) ??
             nearestLayout(translateX.value + width.value / 2, list))
 
-        isDragPressureActive.value = 0
-        cancelAnimation(dragPulse)
-        dragPulse.value = withTiming(0, {
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-        })
         translateX.value = withTiming(target.x, { duration: 150, easing: TRAVEL_EASE })
         width.value = withTiming(target.width, { duration: WIDTH_TIMING_MS })
         bumpX.value = withSpring(0, BUMP_SETTLE_X_SPRING)
@@ -565,17 +555,17 @@ export const useTravelingIndicator = (
     bumpY,
     dragX,
     dragY,
-    dragPulse,
     distancePressure,
     glassPresence,
     restReveal,
     restOpacity,
     dragStartX,
-    isDragPressureActive,
+    dragLastX,
     beginDrag,
     endDrag,
     activeKey,
     hasGlass,
+    getDragMotionPressure,
   ])
 
   const rowGesture = useMemo(() => {
@@ -628,7 +618,6 @@ export const useTravelingIndicator = (
         cancelAnimation(bumpY)
         cancelAnimation(dragX)
         cancelAnimation(dragY)
-        cancelAnimation(dragPulse)
         cancelAnimation(distancePressure)
         cancelAnimation(glassPresence)
         cancelAnimation(restReveal)
@@ -639,12 +628,17 @@ export const useTravelingIndicator = (
 
         isRowDragActive.value = 1
         dragStartX.value = nextX
-        isDragPressureActive.value = 0
+        dragLastX.value = nextX
         bumpX.value = 0
         bumpY.value = 0
-        dragX.value = 0
-        dragY.value = 0
-        dragPulse.value = 0
+        dragX.value = withTiming(1, {
+          duration: BUMP_RISE_MS,
+          easing: Easing.out(Easing.quad),
+        })
+        dragY.value = withTiming(1, {
+          duration: BUMP_RISE_MS,
+          easing: Easing.out(Easing.quad),
+        })
         distancePressure.value = 0
         if (hasGlass) {
           glassPresence.value = withTiming(1, {
@@ -678,33 +672,26 @@ export const useTravelingIndicator = (
         const target = nearestLayout(event.x, list)
         const nextX = clampIndicatorX(event.x, target.width, list)
         const pressureBase = Math.max(width.value, target.width, 1)
-        const dragDistance = Math.abs(nextX - dragStartX.value)
+        const moveDelta = nextX - dragLastX.value
+        const motionPressure = getDragMotionPressure(moveDelta, event.velocityX, pressureBase)
 
         translateX.value = nextX
+        dragLastX.value = nextX
         width.value = withTiming(target.width, { duration: 90 })
-
-        if (dragDistance > 1 && isDragPressureActive.value === 0) {
-          isDragPressureActive.value = 1
-          cancelAnimation(dragPulse)
-          dragPulse.value = withRepeat(
-            withTiming(1, {
-              duration: 420,
-              easing: Easing.inOut(Easing.quad),
+        cancelAnimation(distancePressure)
+        distancePressure.value = withSequence(
+          withTiming(motionPressure, {
+            duration: 70,
+            easing: Easing.out(Easing.quad),
+          }),
+          withDelay(
+            70,
+            withTiming(0, {
+              duration: 180,
+              easing: Easing.out(Easing.quad),
             }),
-            -1,
-            true,
-          )
-          dragX.value = withTiming(1, {
-            duration: BUMP_RISE_MS,
-            easing: Easing.out(Easing.quad),
-          })
-          dragY.value = withTiming(1, {
-            duration: BUMP_RISE_MS,
-            easing: Easing.out(Easing.quad),
-          })
-        }
-
-        distancePressure.value = getDragPressure(dragDistance, pressureBase)
+          ),
+        )
       })
       .onFinalize((_event, success) => {
         if (!success && isRowDragActive.value === 0) {
@@ -721,12 +708,6 @@ export const useTravelingIndicator = (
 
         const target = nearestLayout(translateX.value + width.value / 2, list)
 
-        isDragPressureActive.value = 0
-        cancelAnimation(dragPulse)
-        dragPulse.value = withTiming(0, {
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-        })
         translateX.value = withTiming(target.x, { duration: 150, easing: TRAVEL_EASE })
         width.value = withTiming(target.width, { duration: WIDTH_TIMING_MS })
         bumpX.value = withSpring(0, BUMP_SETTLE_X_SPRING)
@@ -750,17 +731,17 @@ export const useTravelingIndicator = (
     bumpY,
     dragX,
     dragY,
-    dragPulse,
     distancePressure,
     glassPresence,
     restReveal,
     restOpacity,
     dragStartX,
-    isDragPressureActive,
+    dragLastX,
     isRowDragActive,
     beginDrag,
     endDrag,
     hasGlass,
+    getDragMotionPressure,
   ])
 
   const indicatorStyle = useAnimatedStyle(() => {
@@ -768,9 +749,8 @@ export const useTravelingIndicator = (
     const bumpScaleY = BUMP_SCALE_Y + distancePressure.value * BUMP_DISTANCE_SCALE_Y
     const dragScaleX = DRAG_SCALE_X + distancePressure.value * DRAG_DISTANCE_SCALE_X
     const dragScaleY = DRAG_SCALE_Y + distancePressure.value * DRAG_DISTANCE_SCALE_Y
-    const pulse = dragPulse.value * dragX.value
-    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX - pulse * 0.05
-    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY + pulse * 0.08
+    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX
+    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY
 
     return {
       borderRadius: getMotionRadius(),
@@ -788,9 +768,8 @@ export const useTravelingIndicator = (
     const bumpScaleY = BUMP_SCALE_Y + distancePressure.value * BUMP_DISTANCE_SCALE_Y
     const dragScaleX = DRAG_SCALE_X + distancePressure.value * DRAG_DISTANCE_SCALE_X
     const dragScaleY = DRAG_SCALE_Y + distancePressure.value * DRAG_DISTANCE_SCALE_Y
-    const pulse = dragPulse.value * dragX.value
-    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX - pulse * 0.05
-    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY + pulse * 0.08
+    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX
+    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY
     const exitScaleX = 1 - (1 - glassPresence.value) * GLASS_EXIT_SQUASH_X
     const exitScaleY = 1 + (1 - glassPresence.value) * GLASS_EXIT_STRETCH_Y
 
@@ -811,9 +790,8 @@ export const useTravelingIndicator = (
     const bumpScaleY = BUMP_SCALE_Y + distancePressure.value * BUMP_DISTANCE_SCALE_Y
     const dragScaleX = DRAG_SCALE_X + distancePressure.value * DRAG_DISTANCE_SCALE_X
     const dragScaleY = DRAG_SCALE_Y + distancePressure.value * DRAG_DISTANCE_SCALE_Y
-    const pulse = dragPulse.value * dragX.value
-    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX - pulse * 0.05
-    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY + pulse * 0.08
+    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX
+    const motionScaleY = 1 + bumpY.value * bumpScaleY + dragY.value * dragScaleY
     const glassExitScaleX = 1 - (1 - glassPresence.value) * GLASS_EXIT_SQUASH_X
     const glassExitScaleY = 1 + (1 - glassPresence.value) * GLASS_EXIT_STRETCH_Y
     const handoffScaleX = glassExitScaleX + restReveal.value * (1 - glassExitScaleX)
@@ -834,8 +812,7 @@ export const useTravelingIndicator = (
   const indicatorClipStyle = useAnimatedStyle(() => {
     const bumpScaleX = BUMP_SCALE_X + distancePressure.value * BUMP_DISTANCE_SCALE_X
     const dragScaleX = DRAG_SCALE_X + distancePressure.value * DRAG_DISTANCE_SCALE_X
-    const pulse = dragPulse.value * dragX.value
-    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX - pulse * 0.05
+    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX
     const glassExitScaleX = 1 - (1 - glassPresence.value) * GLASS_EXIT_SQUASH_X
     const handoffScaleX = glassExitScaleX + restReveal.value * (1 - glassExitScaleX)
     const visibleWidth = width.value * motionScaleX * handoffScaleX
@@ -851,8 +828,7 @@ export const useTravelingIndicator = (
   const indicatorContentStyle = useAnimatedStyle(() => {
     const bumpScaleX = BUMP_SCALE_X + distancePressure.value * BUMP_DISTANCE_SCALE_X
     const dragScaleX = DRAG_SCALE_X + distancePressure.value * DRAG_DISTANCE_SCALE_X
-    const pulse = dragPulse.value * dragX.value
-    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX - pulse * 0.05
+    const motionScaleX = 1 + bumpX.value * bumpScaleX + dragX.value * dragScaleX
     const glassExitScaleX = 1 - (1 - glassPresence.value) * GLASS_EXIT_SQUASH_X
     const handoffScaleX = glassExitScaleX + restReveal.value * (1 - glassExitScaleX)
     const visibleWidth = width.value * motionScaleX * handoffScaleX

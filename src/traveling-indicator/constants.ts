@@ -23,8 +23,8 @@ export const BUMP_DISTANCE_SCALE_Y = 0.24
 
 export const DRAG_SCALE_X = -0.08
 export const DRAG_SCALE_Y = 0.12
-export const DRAG_DISTANCE_SCALE_X = -0.12
-export const DRAG_DISTANCE_SCALE_Y = 0.16
+export const DRAG_DISTANCE_SCALE_X = 0.18
+export const DRAG_DISTANCE_SCALE_Y = -0.3
 
 export const DISTANCE_PRESSURE_MAX = 0.5
 export const INDICATOR_RADIUS_NEAR = 30

@@ -2,13 +2,15 @@
 
 This note documents the path that led to the final tab bar example in this repository. It is intentionally separate from `README.md`: the README can stay short and practical, while this file keeps the design and implementation trail.
 
+I originally built this interaction while working on the mobile interface for [Moniti](https://moniti.io), a consumer debt payoff app that turns credit cards and loans into a clear payoff plan.
+
 ## 1. Start with the visual target
 
 The target interaction was closer to Slack and Telegram than to a normal selected tab pill:
 
 - the indicator can be grabbed directly and dragged with a finger;
-- while traveling, the capsule behaves like a liquid bubble rather than a rigid pill;
-- the farther it travels, the taller and slightly narrower it becomes;
+- while traveling or being dragged, the capsule behaves like a liquid bubble rather than a rigid pill;
+- normal tab-to-tab travel uses capped distance pressure, while direct finger dragging adds extra deformation only while the finger is moving;
 - the shape change is capped so long jumps do not become extreme;
 - the icon and label turn white only in the area covered by the moving indicator;
 - after motion, the glass hands off into a quieter resting highlight.

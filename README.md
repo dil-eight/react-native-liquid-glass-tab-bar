@@ -2,6 +2,10 @@
 
 An Expo + Storybook example of a draggable tab bar indicator inspired by iOS Liquid Glass.
 
+## Built for Moniti
+
+This interaction was originally built for [Moniti](https://moniti.io) — a consumer debt payoff app that turns credit cards and loans into a clear payoff plan.
+
 ## Demo
 
 <img src="assets/demo.gif" alt="Liquid Glass tab bar demo" width="360" />
